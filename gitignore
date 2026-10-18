@@ -1,0 +1,8 @@
+# Secretos: NUNCA subir
+.env
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
