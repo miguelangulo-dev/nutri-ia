@@ -280,7 +280,7 @@ event.listen(
         """
         CREATE OR REPLACE FUNCTION nutri_block_mutation() RETURNS trigger AS $$
         BEGIN
-            RAISE EXCEPTION 'Tabla de auditoría inmutable: % no permitido en %',
+            RAISE EXCEPTION 'Tabla de auditoría inmutable: %% no permitido en %%',
                 TG_OP, TG_TABLE_NAME;
         END;
         $$ LANGUAGE plpgsql
