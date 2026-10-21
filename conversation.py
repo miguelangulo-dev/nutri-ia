@@ -25,7 +25,7 @@ from feature_flags import b2b_enabled
 from messages import t
 from models import ActivityLevel, ConsentType, Goal, GuidePlan, HealthProfile, Language, Sex, User
 from nutrition import bmi, item_title, menu_items, render
-from payments import guide_checkout_url, load_plan
+from payments import expire_pending_guide_links, guide_checkout_url, load_plan
 from states import S, parse_number
 from whatsapp import Inbound, Out, buttons, list_menu, text
 
@@ -113,6 +113,50 @@ async def get_profile(session: AsyncSession, user: User) -> HealthProfile:
     return profile
 
 
+CANCEL_WORDS = {"cancelar", "cancel"}
+
+# Estados en los que CANCELAR reinicia el flujo (antes de que exista una guía pagada)
+_RESTARTABLE = {
+    S.START, S.LANG, S.ROLE, S.PRIVACY, S.ALIAS, S.AGE, S.SEX, S.WEIGHT, S.HEIGHT,
+    S.WAIST, S.ACTIVITY, S.GOAL, S.DISCLAIMER, S.SWORN, S.REFERRAL_CITY,
+    S.FOOD_PROTEIN, S.FOOD_CARB, S.FOOD_VEG, S.FOOD_FLEX, S.AWAITING_PAYMENT,
+}
+
+
+async def _cancel(session: AsyncSession, user: User, lang: str) -> list[Out]:
+    """CANCELAR:
+    - Antes del pago: borra lo capturado en el perfil, invalida enlaces de pago
+      pendientes y vuelve a la elección de idioma.
+    - Durante el check-in: cancela solo el check-in; la guía pagada sigue activa.
+    - Con guía pagada o seguimiento terminado: no borra nada.
+    Los consentimientos ya registrados se conservan (auditoría inmutable)."""
+    st = user.state
+
+    if st == S.CHECKIN_WEIGHT:
+        user.state = S.ACTIVE
+        log_event(session, "flow.cancelled", user.id, from_state=st)
+        return [text(t("cancel_checkin", lang))]
+
+    if st not in _RESTARTABLE:
+        return [text(t("cancel_paid", lang))]
+
+    if st == S.AWAITING_PAYMENT:
+        await expire_pending_guide_links(session, user)
+
+    profile = await session.scalar(
+        select(HealthProfile).where(HealthProfile.user_id == user.id).with_for_update()
+    )
+    if profile is not None:
+        # Minimización de datos: se descarta lo capturado en el flujo abandonado
+        profile.age = profile.sex = profile.activity_level = profile.goal = None
+        profile.weight_kg = profile.height_cm = profile.waist_cm = None
+        profile.food_choices = {}
+    user.alias = None
+    user.state = S.LANG
+    log_event(session, "flow.cancelled", user.id, from_state=st)
+    return [text(t("cancelled", lang))] + ask(S.LANG, lang)
+
+
 def _block(session: AsyncSession, user: User, reason: str) -> None:
     user.is_blocked = True
     user.blocked_reason = reason
@@ -128,7 +172,12 @@ async def handle(session: AsyncSession, user: User, inb: Inbound) -> list[Out]:
     st = user.state
 
     if user.is_blocked:
+        # CANCELAR tampoco desbloquea: evita saltarse los filtros de edad o de condiciones
         return [text(t("blocked", lang, email=s.support_email))]
+
+    # ---------- Comando CANCELAR (disponible en cualquier momento) ----------
+    if low.strip(" .!¡") in CANCEL_WORDS:
+        return await _cancel(session, user, lang)
 
     # ---------- Inicio e idioma ----------
     if st == S.START:
