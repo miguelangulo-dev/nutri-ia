@@ -19,6 +19,8 @@ T: dict[str, dict[str, str]] = {
             "Hi! I'm *Nutri-IA*.\n"
             "I create *nutrition guides* for *educational food guidance* and wellness habits. "
             "The result depends 100% on the accuracy of the data you enter.\n\n"
+            "❌ En el momento que decidas, escribe *CANCELAR* para empezar de nuevo.\n"
+            "❌ Whenever you want, type *CANCEL* to start over.\n\n"
             "Elige tu idioma / Choose your language:"
         ),
     },
@@ -302,6 +304,20 @@ T: dict[str, dict[str, str]] = {
     "checkin_fast_loss": {
         "es": "⚠️ {alias}, bajaste {delta:.1f} kg en una semana. Es demasiado rápido: no es un logro, es una alerta. Come TODAS las porciones de tu guía. Si sientes debilidad, mareo o falta de energía, consulta a un profesional de la salud.",
         "en": "⚠️ {alias}, you lost {delta:.1f} kg in one week. That's too fast: it's not an achievement, it's a warning. Eat ALL the portions in your guide. If you feel weak, dizzy or low on energy, see a health professional.",
+    },
+
+    # ----- Comando CANCELAR -----
+    "cancelled": {
+        "es": "❌ Proceso cancelado. Los datos que capturaste se descartaron. Empecemos de nuevo 👇",
+        "en": "❌ Process canceled. The data you entered was discarded. Let's start over 👇",
+    },
+    "cancel_checkin": {
+        "es": "Check-in cancelado. Tu guía sigue activa; te lo vuelvo a pedir la próxima semana.",
+        "en": "Check-in canceled. Your guide is still active; I'll ask again next week.",
+    },
+    "cancel_paid": {
+        "es": "Tu guía ya está pagada, así que no hay nada que cancelar. Escribe *GUIA* para verla.",
+        "en": "Your guide is already paid, so there's nothing to cancel. Type *GUIDE* to see it.",
     },
 
     # ----- General -----
