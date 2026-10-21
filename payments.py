@@ -98,6 +98,28 @@ async def guide_checkout_url(session: AsyncSession, user: User) -> str:
     return url
 
 
+async def expire_pending_guide_links(session: AsyncSession, user: User) -> None:
+    """Invalida en Stripe los enlaces de pago pendientes del usuario (comando CANCELAR),
+    para que no pueda pagar una guía de un flujo que ya abandonó."""
+    pending = (await session.scalars(
+        select(Payment).where(
+            Payment.user_id == user.id,
+            Payment.kind == PaymentKind.GUIDE,
+            Payment.status == PaymentStatus.PENDING,
+        )
+    )).all()
+    if not pending:
+        return
+    stripe.api_key = get_settings().stripe_secret_key.get_secret_value()
+    for pay in pending:
+        try:
+            await asyncio.to_thread(stripe.checkout.Session.expire, pay.stripe_session_id)
+        except Exception:
+            # Ya expirado o ya pagado: el webhook de Stripe decide el estado final
+            log.warning("No se pudo expirar la sesión de pago %s", pay.id)
+        pay.status = PaymentStatus.EXPIRED
+
+
 async def pro_checkout_url(session: AsyncSession, pro: Professional) -> str:
     s = get_settings()
     en = pro.language == Language.EN
