@@ -129,8 +129,16 @@ async def _cancel(session: AsyncSession, user: User, lang: str) -> list[Out]:
       pendientes y vuelve a la elección de idioma.
     - Durante el check-in: cancela solo el check-in; la guía pagada sigue activa.
     - Con guía pagada o seguimiento terminado: no borra nada.
+    - Bloqueado (edad o condiciones declaradas): se desbloquea y reinicia; el
+      bloqueo anterior queda registrado en la auditoría.
     Los consentimientos ya registrados se conservan (auditoría inmutable)."""
     st = user.state
+
+    if user.is_blocked:
+        log_event(session, "user.unblocked_by_cancel", user.id, previous_reason=user.blocked_reason)
+        user.is_blocked = False
+        user.blocked_reason = None
+        st = S.START  # Se trata como flujo sin pagar: se reinicia completo
 
     if st == S.CHECKIN_WEIGHT:
         user.state = S.ACTIVE
@@ -171,13 +179,15 @@ async def handle(session: AsyncSession, user: User, inb: Inbound) -> list[Out]:
     low = ans.lower()
     st = user.state
 
-    if user.is_blocked:
-        # CANCELAR tampoco desbloquea: evita saltarse los filtros de edad o de condiciones
-        return [text(t("blocked", lang, email=s.support_email))]
-
     # ---------- Comando CANCELAR (disponible en cualquier momento) ----------
+    # Decisión de negocio: CANCELAR también reinicia a usuarios bloqueados.
+    # El bloqueo previo y su motivo quedan en audit_log, y cada nueva declaración
+    # bajo protesta queda en consent_records: hay registro de ambas respuestas.
     if low.strip(" .!¡") in CANCEL_WORDS:
         return await _cancel(session, user, lang)
+
+    if user.is_blocked:
+        return [text(t("blocked", lang, email=s.support_email))]
 
     # ---------- Inicio e idioma ----------
     if st == S.START:
